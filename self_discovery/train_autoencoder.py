@@ -107,6 +107,15 @@ class SetupConfig:
         print("\n")
 
 
+def get_list_of_images(path):
+    """ glob all the images and return target images in a list """
+    try:
+        images = glob(os.path.join(path, "*"))
+        return images
+    except FileNotFoundError:
+        print("Wrong file or file path")
+
+
 class DataGenerator(tf.keras.utils.Sequence):
     """
     Every Sequence must implement the __getitem__ and the __len__ methods.
@@ -124,17 +133,9 @@ class DataGenerator(tf.keras.utils.Sequence):
                  ):
 
         self.directory = directory
-        self.image_paths = self.get_list_of_images(directory)
+        self.image_paths = get_list_of_images(directory)
         self.batch_size = batch_size
         self.dim = dim
-
-    def get_list_of_images(self, path):
-        """ glob all the images and return target images in a list """
-        try:
-            images = glob(os.path.join(path, "*"))
-            return images
-        except FileNotFoundError:
-            print("Wrong file or file path")
 
     def data_loader(self, file_list):
         input_rows = self.dim[0]
@@ -186,11 +187,11 @@ if __name__ == "__main__":
     config.display()
 
     # # arch need to be filled
-    if args.arch == "Vnet":
-        pass
-    elif args.arch == "Unet":
+    if args.arch == "Unet":
         model = unet_model_3d(input_shape=(1, config.input_rows, config.input_cols, config.input_deps),
                               batch_normalization=True)
+    # elif args.arch == "Vnet":
+    #     pass
 
     if args.weights is not None:
         print(f"Load the pre-trained weights from {args.weights}")
