@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-K.set_image_data_format("channels_first")
+tf.keras.backend.set_image_data_format("channels_first")
 
 
 def create_convolution_block(input_layer,

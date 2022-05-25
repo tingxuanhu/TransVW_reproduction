@@ -36,7 +36,10 @@ parser.add_argument("--weights", dest="weights", default=None, type=str, help="p
 parser.add_argument("--batch_size", default=8, type=int, help="batch size")
 parser.add_argument("--seed", default=1, type=int)
 
-parser.add_argument("--data_dir", dest="data_dir", default=None, help="path to data")
+# parser.add_argument("--data_dir", dest="data_dir", default=None, help="path to data")
+parser.add_argument("--data_dir", dest="data_dir", default="/Users/tingxuanhu/Downloads/dataset/luna16-7",
+                    help="path to data")
+
 parser.add_argument("--model_path", dest="model_path", default="Checkpoints/Autoencoder", help="path to save model")
 
 args = parser.parse_args()
@@ -112,6 +115,7 @@ def get_list_of_images(path):
     try:
         images = glob(os.path.join(path, "*"))
         return images
+
     except FileNotFoundError:
         print("Wrong file or file path")
 
@@ -172,7 +176,6 @@ class DataGenerator(tf.keras.utils.Sequence):
         return int(np.ceil(len(self.image_paths) / self.batch_size))  # 7.6 epoch --> 8 epoch to load all the data
 
     def __getitem__(self, index):
-
         file_names = self.image_paths[index * self.batch_size: (index + 1) * self.batch_size]
         return self.data_loader(file_names)
 
@@ -224,22 +227,23 @@ if __name__ == "__main__":
 
     callbacks = [check_point, early_stopping, lr_scheduler]
 
-    # training_generator = DataGenerator(directory=os.path.join(args.data_dir, 'train/'),
-    #                                    batch_size=args.batch_size,
-    #                                    dim=(config.input_rows, config.input_cols, config.input_deps))
-    #
-    # validation_generator = DataGenerator(directory=os.path.join(args.data_dir, 'validation/'),
-    #                                      batch_size=args.batch_size,
-    #                                      dim=(config.input_rows, config.input_cols, config.input_deps))
-    #
-    # model.fit(x=training_generator,
-    #           validation_data=validation_generator,
-    #           steps_per_epoch=len(training_generator) // args.batch_size,
-    #           validation_steps=len(validation_generator) // args.batch_size,
-    #           epochs=config.nb_epoch,
-    #           max_queue_size=20,
-    #           workers=7,
-    #           use_multiprocessing=True,
-    #           shuffle=True,
-    #           verbose=config.verbose,
-    #           callbacks=callbacks)
+    training_generator = DataGenerator(directory=os.path.join(args.data_dir, 'train/'),
+                                       batch_size=args.batch_size,
+                                       dim=(config.input_rows, config.input_cols, config.input_deps))
+
+    validation_generator = DataGenerator(directory=os.path.join(args.data_dir, 'validation/'),
+                                         batch_size=args.batch_size,
+                                         dim=(config.input_rows, config.input_cols, config.input_deps))
+
+    # train the autoencoder
+    model.fit(x=training_generator,
+              validation_data=validation_generator,
+              steps_per_epoch=len(training_generator) // args.batch_size,
+              validation_steps=len(validation_generator) // args.batch_size,
+              epochs=config.nb_epoch,
+              max_queue_size=20,
+              workers=7,
+              use_multiprocessing=True,
+              shuffle=True,
+              verbose=config.verbose,
+              callbacks=callbacks)
