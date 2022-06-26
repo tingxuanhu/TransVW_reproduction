@@ -196,6 +196,7 @@ if __name__ == "__main__":
     # elif args.arch == "Vnet":
     #     pass
 
+    # --- transfer learning
     if args.weights is not None:
         print(f"Load the pre-trained weights from {args.weights}")
         model.load_weights(filepath=args.weights)

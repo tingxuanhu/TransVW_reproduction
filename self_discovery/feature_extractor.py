@@ -55,8 +55,8 @@ model.compile(optimizer=tf.keras.optimizers.SGD(learning_rate=args.learning_rate
                                                 decay=.0,
                                                 nesterov=False,
                                                 clipnorm=1),
-              loss="MSE",
-              metrics=["MAE", "MSE"])
+                                                loss="MSE",
+                                                metrics=["MAE", "MSE"])
 
 # ------- extract the encoder for feature extraction ------------
 x = model.get_layer('depth_7_relu').output
