@@ -1,0 +1,67 @@
+
+
+import torch
+from torch import nn
+import torch.nn.functional as F
+from torch.utils.data import Dataset, DataLoader
+from models.ynet3d import *
+
+# prepare your own data
+train_loader = DataLoader(Your Dataset, batch_size=config.batch_size, shuffle=True)
+
+# prepare the 3D model
+class TargetNet(nn.Module):
+    def __init__(self, base_model,n_class=1):
+        super(TargetNet, self).__init__()
+
+        self.base_model = base_model
+        self.dense_1 = nn.Linear(512, n_class, bias=True)
+
+    def forward(self, x):
+        self.base_model(x)
+        self.base_out = self.base_model.out512
+        # This global average polling is for shape (N,C,H,W) not for (N, H, W, C)
+        # where N = batch_size, C = channels, H = height, and W = Width
+        self.out_glb_avg_pool = F.avg_pool3d(self.base_out, kernel_size=self.base_out.size()[2:]).view(self.base_out.size()[0],-1)
+        self.linear_out = self.dense_1(self.out_glb_avg_pool)
+        final_out = F.relu(self.linear_out)
+        return final_out
+        
+base_model = UNet3D()
+
+#Load pre-trained weights
+weight_dir = 'Checkpoints/en_de/TransVW_chest_ct.pt'
+checkpoint = torch.load(weight_dir)
+state_dict = checkpoint['state_dict']
+state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+delete = [key for key in state_dict if "projection_head" in key]
+for key in delete: del state_dict[key]
+delete = [key for key in state_dict if "prototypes" in key]
+for key in delete: del state_dict[key]
+for key in state_dict.keys():
+    if key in base_model.state_dict().keys():
+        base_model.state_dict()[key].copy_(state_dict[key])
+        print("Copying {} <---- {}".format(key, key))
+    elif key.replace("classficationNet.", "") in base_model.state_dict().keys():
+        base_model.state_dict()[key.replace("classficationNet.", "")].copy_(state_dict[key])
+        print("Copying {} <---- {}".format(key.replace("classficationNet.", ""), key))
+    else:
+        print("Key {} is not found".format(key))
+
+target_model = TargetNet(base_model)
+target_model.to(device)
+target_model = nn.DataParallel(target_model, device_ids = [i for i in range(torch.cuda.device_count())])
+criterion = nn.BCELoss()
+optimizer = torch.optim.SGD(target_model.parameters(), config.lr, momentum=0.9, weight_decay=0.0, nesterov=False)
+
+# train the model
+
+for epoch in range(intial_epoch, config.nb_epoch):
+    target_model.train()
+    for batch_ndx, (x,y) in enumerate(train_loader):
+        x, y = x.float().to(device), y.float().to(device)
+        pred = F.sigmoid(target_model(x))
+        loss = criterion(pred, y)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
