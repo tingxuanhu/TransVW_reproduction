@@ -12,6 +12,8 @@ class MyData(Dataset):
         self.root_dir = root_dir
         self.label_dir = label_dir
         self.path = os.path.join(self.root_dir, self.label_dir)
+        self.img_path = os.listdir(self.path)
+
         
     def __getitem__(self, idx):
         img_name = self.img_path[idx]
