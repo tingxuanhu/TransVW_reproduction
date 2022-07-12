@@ -1,63 +1,113 @@
 import os
 
+import numpy as np
+from sklearn.model_selection import train_test_split
+
 import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
 from models.ynet3d import *
+from config import *
+
+torch.manual_seed(1)
+# transform = transforms.Compose([
+#     transforms.ToTensor(),  # 转为tensor且归一化 （此前已经归一化）
+# ])
+
+# customize dataset
+root_dir = '/home/data/tingxuan/DatasetForTest/data'
+pneumonia_label_dir = '1'  # pneumonia
+cancer_label_dir = '0'  # cancer
 
 
+# imitate data_loader.py file to establish our own dataset for pneumonia classification
 class MyData(Dataset):
-    def __init__(self, root_dir, label_dir):
+    def __init__(self, root_dir, label_dir, train=True, test=False):
+        self.train = train
+        self.test = test
         self.root_dir = root_dir
         self.label_dir = label_dir
         self.path = os.path.join(self.root_dir, self.label_dir)
         self.img_path = os.listdir(self.path)
+        if self.test:
+            # imgs = sorted(self.img_path, key=lambda x: int(x.split('.')[-2]))
+            imgs = sorted(self.img_path)
 
-        
+        else:
+            # imgs = sorted(self.img_path, key=lambda x: int(x.split('.')[-2]))
+            imgs = sorted(self.img_path)
+
+        imgs_len = len(imgs)
+        if self.test:
+            self.imgs = self.img_path
+        elif self.train:
+            self.imgs = self.img_path[:int(.7 * imgs_len)]
+        else:
+            self.imgs = self.img_path[int(.7 * imgs_len):]
+
     def __getitem__(self, idx):
-        img_name = self.img_path[idx]
-        img_item_path = os.path.join(self.root_dir, self.label_dir, img_name)
-        label = self.label_dir
-        return img_name, label
-        
+        img_name = self.imgs[idx]
+        image = torch.from_numpy(np.load(os.path.join(self.path, str(img_name))))
+        label = 0 if self.label_dir == '0' else 1
+        return image, label
+
     def __len__(self):
         return len(self.img_path)
 
 
+pneumonia_train_dataset = MyData(root_dir, pneumonia_label_dir, train=True)
+cancer_train_dataset = MyData(root_dir, cancer_label_dir, train=True)
+train_dateset = pneumonia_train_dataset + cancer_train_dataset
 
-# prepare your own data
-train_loader = DataLoader(Your Dataset, batch_size=config.batch_size, shuffle=True)
+pneumonia_val_dataset = MyData(root_dir, pneumonia_label_dir, train=False)
+cancer_val_dataset = MyData(root_dir, cancer_label_dir, train=False)
+val_dateset = pneumonia_val_dataset + cancer_val_dataset
+
+
+# using dataloader
+train_loader = DataLoader(train_dateset, batch_size=1, shuffle=True)
+val_loader = DataLoader(val_dateset, batch_size=1, shuffle=True)
+
 
 # prepare the 3D model
 class TargetNet(nn.Module):
-    def __init__(self, base_model,n_class=1):
+    def __init__(self, base_model, n_class=1):
         super(TargetNet, self).__init__()
-
         self.base_model = base_model
-        self.dense_1 = nn.Linear(512, n_class, bias=True)
+        self.dense_1 = nn.Linear(in_features=512, out_features=n_class, bias=True)
 
     def forward(self, x):
         self.base_model(x)
         self.base_out = self.base_model.out512
-        # This global average polling is for shape (N,C,H,W) not for (N, H, W, C)
-        # where N = batch_size, C = channels, H = height, and W = Width
-        self.out_glb_avg_pool = F.avg_pool3d(self.base_out, kernel_size=self.base_out.size()[2:]).view(self.base_out.size()[0],-1)
+
+        # glb_avg_pool is for (N--batch_size,C--channels,H,W), not for (N,H,W,C)
+        self.out_glb_avg_pool = F.avg_pool3d(input=self.base_out,
+                                             kernel_size=self.base_out.size()[2:].view(self.base_out.size()[0], -1))
         self.linear_out = self.dense_1(self.out_glb_avg_pool)
         final_out = F.relu(self.linear_out)
+
         return final_out
-        
+
+
 base_model = UNet3D()
 
-#Load pre-trained weights
-weight_dir = 'Checkpoints/en_de/TransVW_chest_ct.pt'
+
+# ----------------------- Load pre-trained weights -----------------------------
+weight_dir = "Checkpoints/en_de/TransVW_chest_ct.pt"
 checkpoint = torch.load(weight_dir)
+
 state_dict = checkpoint['state_dict']
 state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+
 delete = [key for key in state_dict if "projection_head" in key]
-for key in delete: del state_dict[key]
+for key in delete:
+    del state_dict[key]
 delete = [key for key in state_dict if "prototypes" in key]
-for key in delete: del state_dict[key]
+for key in delete:
+    del state_dict[key]
+
 for key in state_dict.keys():
     if key in base_model.state_dict().keys():
         base_model.state_dict()[key].copy_(state_dict[key])
@@ -69,19 +119,26 @@ for key in state_dict.keys():
         print("Key {} is not found".format(key))
 
 target_model = TargetNet(base_model)
+device = torch.device("cuda")
 target_model.to(device)
-target_model = nn.DataParallel(target_model, device_ids = [i for i in range(torch.cuda.device_count())])
+
+# target_model = nn.DataParallel(target_model, device_ids=[i for i in range(torch.cuda.device_count())])
+
 criterion = nn.BCELoss()
-optimizer = torch.optim.SGD(target_model.parameters(), config.lr, momentum=0.9, weight_decay=0.0, nesterov=False)
+optimizer = torch.optim.SGD(target_model.parameters(), lr=.001, momentum=.9, weight_decay=0.0, nesterov=False)
 
-# train the model
 
-for epoch in range(intial_epoch, config.nb_epoch):
+# ----------------------------------------------------- train the model --------------------------------------------
+# for epoch in range(initial_epoch, config.nb_epoch):   # 改成迭代轮数
+for epoch in range(2):   # 改成迭代轮数
     target_model.train()
-    for batch_ndx, (x,y) in enumerate(train_loader):
+    for batch_ndx, (x, y) in enumerate(train_loader):
         x, y = x.float().to(device), y.float().to(device)
         pred = F.sigmoid(target_model(x))
         loss = criterion(pred, y)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+
+
+
