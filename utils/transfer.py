@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import skimage.transform
 from sklearn.model_selection import train_test_split
 
 import torch
@@ -17,7 +18,7 @@ torch.manual_seed(1)
 # ])
 
 # customize dataset
-root_dir = '/home/data/tingxuan/DatasetForTest/data'
+root_dir = '/home/data/tingxuan/demo'
 pneumonia_label_dir = '1'  # pneumonia
 cancer_label_dir = '0'  # cancer
 
@@ -43,15 +44,28 @@ class MyData(Dataset):
         if self.test:
             self.imgs = self.img_path
         elif self.train:
-            self.imgs = self.img_path[:int(.7 * imgs_len)]
+            self.imgs = self.img_path[:int(.75 * imgs_len)]
         else:
-            self.imgs = self.img_path[int(.7 * imgs_len):]
+            self.imgs = self.img_path[int(.75 * imgs_len):]
 
     def __getitem__(self, idx):
+        input_rows = 128
+        input_cols = 128
+        input_deps = 64
+        # x = np.zeros((8, 1, input_rows, input_cols, input_deps), dtype=float)
+
         img_name = self.imgs[idx]
-        image = torch.from_numpy(np.load(os.path.join(self.path, str(img_name))))
+        img_path = os.path.join(self.path, str(img_name))
+        img = np.load(img_path)
+        img = skimage.transform.resize(img, (input_rows, input_cols, input_deps), preserve_range=True)
+        img = np.expand_dims(img, axis=0)   # expand the Channel dim
+        # x[idx, :, :, :, :] = img
+        print('------------------')
+        print(img.shape)
+
+        # image = torch.from_numpy(np.load(os.path.join(self.path, str(img_name))))
         label = 0 if self.label_dir == '0' else 1
-        return image, label
+        return img, label
 
     def __len__(self):
         return len(self.img_path)
@@ -67,8 +81,8 @@ val_dateset = pneumonia_val_dataset + cancer_val_dataset
 
 
 # using dataloader
-train_loader = DataLoader(train_dateset, batch_size=1, shuffle=True)
-val_loader = DataLoader(val_dateset, batch_size=1, shuffle=True)
+train_loader = DataLoader(train_dateset, batch_size=1, shuffle=True, num_workers=0, pin_memory=False)
+val_loader = DataLoader(val_dateset, batch_size=1, shuffle=True, num_workers=0, pin_memory=False)
 
 
 # prepare the 3D model
@@ -85,9 +99,9 @@ class TargetNet(nn.Module):
         # glb_avg_pool is for (N--batch_size,C--channels,H,W), not for (N,H,W,C)
         self.out_glb_avg_pool = F.avg_pool3d(input=self.base_out,
                                              kernel_size=self.base_out.size()[2:].view(self.base_out.size()[0], -1))
+
         self.linear_out = self.dense_1(self.out_glb_avg_pool)
         final_out = F.relu(self.linear_out)
-
         return final_out
 
 
@@ -111,10 +125,10 @@ for key in delete:
 for key in state_dict.keys():
     if key in base_model.state_dict().keys():
         base_model.state_dict()[key].copy_(state_dict[key])
-        print("Copying {} <---- {}".format(key, key))
+        # print("Copying {} <---- {}".format(key, key))
     elif key.replace("classficationNet.", "") in base_model.state_dict().keys():
         base_model.state_dict()[key.replace("classficationNet.", "")].copy_(state_dict[key])
-        print("Copying {} <---- {}".format(key.replace("classficationNet.", ""), key))
+        # print("Copying {} <---- {}".format(key.replace("classficationNet.", ""), key))
     else:
         print("Key {} is not found".format(key))
 
@@ -122,7 +136,7 @@ target_model = TargetNet(base_model)
 device = torch.device("cuda")
 target_model.to(device)
 
-# target_model = nn.DataParallel(target_model, device_ids=[i for i in range(torch.cuda.device_count())])
+target_model = nn.DataParallel(target_model, device_ids=[i for i in range(torch.cuda.device_count())])
 
 criterion = nn.BCELoss()
 optimizer = torch.optim.SGD(target_model.parameters(), lr=.001, momentum=.9, weight_decay=0.0, nesterov=False)
@@ -132,8 +146,11 @@ optimizer = torch.optim.SGD(target_model.parameters(), lr=.001, momentum=.9, wei
 # for epoch in range(initial_epoch, config.nb_epoch):   # 改成迭代轮数
 for epoch in range(2):   # 改成迭代轮数
     target_model.train()
-    for batch_ndx, (x, y) in enumerate(train_loader):
-        x, y = x.float().to(device), y.float().to(device)
+    for batch_idx, (x, y) in enumerate(train_loader):
+        # x, y = x.float().to(device), y.float().to(device)
+        print(x.shape)
+        x, y = x.float(), y.float()
+
         pred = F.sigmoid(target_model(x))
         loss = criterion(pred, y)
         optimizer.zero_grad()
@@ -141,4 +158,4 @@ for epoch in range(2):   # 改成迭代轮数
         optimizer.step()
 
 
-
+# https://blog.csdn.net/robot_learner/article/details/122169847  --> 训练过程  测试结果书写
