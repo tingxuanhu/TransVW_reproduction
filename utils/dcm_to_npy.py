@@ -8,12 +8,19 @@ parent_dir = "/home/data/tingxuan/DatasetForTest"
 dicom_dir = os.listdir(parent_dir)
 print(dicom_dir)
 
-for scans in dicom_dir:
-    if scans != 'train' and scans != 'test' and scans != 'validation':
-        path = os.path.join(parent_dir, scans)
-        print(path)
-        dicom_names = sitk.ImageSeriesReader_GetGDCMSeriesFileNames(path)
-        reader.SetFileNames(dicom_names)
+for type in dicom_dir:
+    path = os.path.join(parent_dir, type)
+    print(path)
+    dicom = os.listdir(path)
+    print(dicom)
+
+    count = 0
+
+    for dicom_name in dicom:
+        dicom_names = os.path.join(path, dicom_name)
+        print(dicom_names)
+        target_names = sitk.ImageSeriesReader_GetGDCMSeriesFileNames(dicom_names)
+        reader.SetFileNames(target_names)
         image = reader.Execute()
         image_array = sitk.GetArrayFromImage(image)  # z, y, x
         # print(type(image_array))  # <class 'numpy.ndarray'>
@@ -33,9 +40,23 @@ for scans in dicom_dir:
         image_copy = (image_copy - hu_min) / (hu_max - hu_min)
         # print(image_copy)
         print(image_copy.shape)
-        # print(image_copy.shape[0])
-        print('--------------------------------------------------------------------------')
+
+        # imageCHWD = np.expand_dims(image_copy, axis=0)
+        # print(imageCHWD.shape)
+        # print('--------------------------------------------------------------------------')
 
         # save npy file
-        path_to_save_npy = f'/home/data/tingxuan/DatasetForTest/train/{scans}_{image_copy.shape[2]}.npy'
+        if type == '0':
+            path_to_save_npy = f'/home/data/tingxuan/demo/0/data_{type}_00{count}_{image_copy.shape[2]}.npy'
+        elif type == '1':
+            path_to_save_npy = f'/home/data/tingxuan/demo/1/data_{type}_00{count}_{image_copy.shape[2]}.npy'
+        else:
+            path_to_save_npy = f'/home/data/tingxuan/demo/data_{type}_00{count}_{image_copy.shape[2]}.npy'
+
+        count += 1
+
+        print(path_to_save_npy)
         np.save(path_to_save_npy, image_copy)
+        print('--------------------------------------------------------------------------')
+
+
