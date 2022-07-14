@@ -46,17 +46,10 @@ for type in dicom_dir:
         # print('--------------------------------------------------------------------------')
 
         # save npy file
-        if type == '0':
-            path_to_save_npy = f'/home/data/tingxuan/demo/0/data_{type}_00{count}_{image_copy.shape[2]}.npy'
-        elif type == '1':
-            path_to_save_npy = f'/home/data/tingxuan/demo/1/data_{type}_00{count}_{image_copy.shape[2]}.npy'
-        else:
-            path_to_save_npy = f'/home/data/tingxuan/demo/data_{type}_00{count}_{image_copy.shape[2]}.npy'
+        path_to_save_npy = f'/home/data/tingxuan/demo/classification/data.{type}.00{count}.{image_copy.shape[2]}.npy'
 
         count += 1
 
         print(path_to_save_npy)
         np.save(path_to_save_npy, image_copy)
         print('--------------------------------------------------------------------------')
-
-
