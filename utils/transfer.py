@@ -55,13 +55,16 @@ class MyData(Dataset):
         # x = np.zeros((8, 1, input_rows, input_cols, input_deps), dtype=float)
 
         img_name = self.imgs[idx]
+
+        print(img_name)
+        print(idx)
+
         img_path = os.path.join(self.path, str(img_name))
         img = np.load(img_path)
         img = skimage.transform.resize(img, (input_rows, input_cols, input_deps), preserve_range=True)
         img = np.expand_dims(img, axis=0)   # expand the Channel dim
         # x[idx, :, :, :, :] = img
-        print('------------------')
-        print(img.shape)
+        # print(img.shape)  # (1, 128, 128, 64)
 
         # image = torch.from_numpy(np.load(os.path.join(self.path, str(img_name))))
         label = 0 if self.label_dir == '0' else 1
@@ -90,20 +93,24 @@ class TargetNet(nn.Module):
     def __init__(self, base_model, n_class=1):
         super(TargetNet, self).__init__()
         self.base_model = base_model
-        self.dense_1 = nn.Linear(in_features=512, out_features=n_class, bias=True)
+
+        self.dense_1 = nn.Linear(in_features=512, out_features=128, bias=True)
+        self.dense_2 = nn.Linear(in_features=128, out_features=n_class, bias=True)
+
+        # self.dense_1 = nn.Linear(in_features=512, out_features=n_class, bias=True)
 
     def forward(self, x):
         self.base_model(x)
         self.base_out = self.base_model.out512
-
         # glb_avg_pool is for (N--batch_size,C--channels,H,W), not for (N,H,W,C)
         self.out_glb_avg_pool = F.avg_pool3d(input=self.base_out,
-                                             kernel_size=self.base_out.size()[2:].view(self.base_out.size()[0], -1))
-
+                                             kernel_size=self.base_out.size()[2:]).view(self.base_out.size()[0], -1)
         self.linear_out = self.dense_1(self.out_glb_avg_pool)
-        final_out = F.relu(self.linear_out)
-        return final_out
+        self.linear_out2 = self.dense_2(self.linear_out)
+        final_out = F.relu(self.linear_out2)
 
+        # final_out = F.relu(self.linear_out)
+        return final_out
 
 base_model = UNet3D()
 
@@ -139,23 +146,30 @@ target_model.to(device)
 target_model = nn.DataParallel(target_model, device_ids=[i for i in range(torch.cuda.device_count())])
 
 criterion = nn.BCELoss()
-optimizer = torch.optim.SGD(target_model.parameters(), lr=.001, momentum=.9, weight_decay=0.0, nesterov=False)
+optimizer = torch.optim.SGD(target_model.parameters(), lr=.0001, momentum=.9, weight_decay=0.0, nesterov=False)
 
 
-# ----------------------------------------------------- train the model --------------------------------------------
+# ------------------------------------------- train the model --------------------------------------------
 # for epoch in range(initial_epoch, config.nb_epoch):   # 改成迭代轮数
 for epoch in range(2):   # 改成迭代轮数
     target_model.train()
     for batch_idx, (x, y) in enumerate(train_loader):
-        # x, y = x.float().to(device), y.float().to(device)
-        print(x.shape)
-        x, y = x.float(), y.float()
+        x, y = x.float().to(device), y.float().to(device)
+        # print(x.shape)
 
-        pred = F.sigmoid(target_model(x))
+        # x, y = x.float(), y.float()
+
+        pred = torch.sigmoid(target_model(x)).view(y.size())
+        print(pred)
+        print(y)
         loss = criterion(pred, y)
+        print(loss)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
 
 # https://blog.csdn.net/robot_learner/article/details/122169847  --> 训练过程  测试结果书写
+
+
+
