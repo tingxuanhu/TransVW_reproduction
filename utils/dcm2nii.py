@@ -1,5 +1,4 @@
 import SimpleITK as sitk
-import nibabel as nib
 import numpy as np
 from numba import jit
 import os
