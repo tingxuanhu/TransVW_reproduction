@@ -14,10 +14,12 @@ def list_file(directory):
 
 
 def hu_convert(slices):
-    # z, y, x
-    images = np.stack([s.pixel_array for s in slices]).astype(np.int16)
+    # 转换为int16，int16是ok的，因为所有的数值都应该 <32k
+    images = np.stack([s.pixel_array for s in slices]).astype(np.int16)      # z, y, x
+
     images[images == -2048] = 0
 
+    # 转换为HU单位
     for slice_num in range(len(slices)):
         intercept = slices[slice_num].RescaleIntercept
         slope = slices[slice_num].RescaleSlope
@@ -53,19 +55,41 @@ def set_ww_and_wc(img_data, win_width, win_center):
     return img_data
 
 
-def save_as_dcm_path(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
+# def save_as_dcm_path(path):
+#     if not os.path.exists(path):
+#         os.makedirs(path)
 
 
 def load_and_hu_convert(path_to_load, path_to_save, win_width, win_center):
+    print(path_to_load)
     slices = [pydicom.read_file(os.path.join(path_to_load, s), force=True) for s in os.listdir(path_to_load)]
+
+    # print(slices[0])
+
     slices.sort(key=lambda x: float(x.ImagePositionPatient[2]))
-    patient_slices_hu = hu_convert(slices)
-    patient_pixels = set_ww_and_wc(patient_slices_hu, win_width, win_center)
-    for idx, ith_value in enumerate(slices):
-        ith_value.Pixel_data = patient_pixels[idx].tobytes()
-        ith_value.save_as(path_to_save + f"/I_00{idx}.dcm")
+
+    image = np.stack([s.pixel_array for s in slices])
+
+    # image = image.astype(np.int16)
+
+    print(np.max(image), np.min(image))
+
+
+    # for idx, ith_value in enumerate(slices):
+    #     print("================================================================")
+    #     print("ith_value", ith_value.PixelData)
+    #
+    #     patient_slices_hu = hu_convert(ith_value.PixelData)
+    #     patient_pixels = set_ww_and_wc(patient_slices_hu, win_width, win_center)
+    #
+    #     print("================================================================")
+    #     print("patient_pixels", patient_pixels)
+    #
+    #     break
+
+        # ith_value.Pixel_data = patient_pixels.tobytes()
+        # ith_value.save_as(path_to_save + f"/I_00{idx}.dcm")
+
     # return patient_pixels
 
 
@@ -84,11 +108,9 @@ for directory in dcm_list:
 
     if not os.path.exists(os.path.join('/home/data/tingxuan/HU/', dir_for_save)):
         os.makedirs(os.path.join('/home/data/tingxuan/HU/', dir_for_save))
-
     path_to_save = os.path.join('/home/data/tingxuan/HU/', dir_for_save)
 
     # patient0_slices
     load_and_hu_convert(directory, path_to_save, win_width, win_center)
 
-
-
+    break
