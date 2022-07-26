@@ -1,7 +1,8 @@
+import SimpleITK as sitk
 import nibabel as nib
 import numpy as np
-import SimpleITK as sitk
 from numba import jit
+import os
 
 
 @jit(nopython=True)
@@ -56,20 +57,26 @@ def dcm2nii(dcms_path, nii_path, ww, wc):
     sitk.WriteImage(image3, nii_path)
 
 
+def list_file(directory):
+    file_inner = os.listdir(directory)
+    file_list = []
+    for file in file_inner:
+        dcm_file = os.path.join(directory, file)
+        file_list.append(dcm_file)
+    return file_list
+
 
 if __name__ == '__main__':
 
     # 纵隔窗窗宽窗位
     win_width, win_center = 300, 40
 
-    dcms_path = "/home/data/tingxuan/DICOM/UDC0HSKF/"
+    dcm_path = "/home/data/tingxuan/DICOM/"
+    dcm_list = list_file(dcm_path)   # dcm_list -->  ['/home/data/tingxuan/DICOM/UDC0HSKF',  ...]
 
-    nii_path = "/home/data/tingxuan/NII/UDC0HSKF.nii"
-
-    dcm2nii(dcms_path, nii_path, win_width, win_center)
-
-    img = nib.load(nii_path)
-    img = img.get_fdata()
-
-
+    for directory in dcm_list:
+        original_dir = directory.split("/")[-1].split("/")[0]
+        NII_PATH = '/home/data/tingxuan/NII/'
+        nii_save_path = NII_PATH + original_dir + '.nii'
+        dcm2nii(directory, nii_save_path, win_width, win_center)
 
