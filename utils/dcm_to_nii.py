@@ -1,46 +1,7 @@
-import os
-import numpy as np
-import pydicom
-from numba import jit
-import matplotlib.pyplot as plt
-import cv2
-import SimpleITK as sitk
-import glob
 import nibabel as nib
-
-
-def list_file(directory):
-    file_inner = os.listdir(directory)
-    file_list = []
-    for file in file_inner:
-        dcm_file = os.path.join(directory, file)
-        file_list.append(dcm_file)
-    return file_list
-
-
-# def list_scans(file_list):
-#     patient_scan_list = [[] for i in file_list]
-#     for idx, scans in enumerate(file_list):
-#         patient_list_scans = list_file(scans)
-#         # print(patient_list_scans)
-#         for scan in patient_list_scans:
-#             patient_scan_list[idx].append(scan)
-#     return patient_scan_list
-
-
-def hu_convert(slices):
-    # z, y, x
-    images = np.stack([s.pixel_array for s in slices]).astype(np.int16)
-    images[images == -2048] = 0
-
-    for slice_num in range(len(slices)):
-        intercept = slices[slice_num].RescaleIntercept
-        slope = slices[slice_num].RescaleSlope
-        if slope != 1:
-            images[slice_num] = slope * images[slice_num].astype(np.float64)
-            images[slice_num] = images[slice_num].astype(np.int16)
-        images[slice_num] = images[slice_num] + np.int16(intercept)
-    return images
+import numpy as np
+import SimpleITK as sitk
+from numba import jit
 
 
 @jit(nopython=True)
@@ -68,44 +29,50 @@ def set_ww_and_wc(img_data, win_width, win_center):
     return img_data
 
 
-# def save_as_dcm(path):
-#     if not os.path.exists(path):
-#         os.makedirs(path)
+def dcm2nii(dcms_path, nii_path, ww, wc):
 
+    # 1.构建dicom序列文件阅读器，并执行（即将dicom序列文件“打包整合”）
+    reader = sitk.ImageSeriesReader()
+    dicom_names = reader.GetGDCMSeriesFileNames(dcms_path)
+    reader.SetFileNames(dicom_names)
+    image2 = reader.Execute()
 
-def load_and_hu_convert(path, win_width, win_center):
-    slices = [pydicom.read_file(os.path.join(path, s), force=True) for s in os.listdir(path)]
-    slices.sort(key=lambda x: float(x.ImagePositionPatient[2]))
-    patient_slices_hu = hu_convert(slices)
-    patient_pixels = set_ww_and_wc(patient_slices_hu, win_width, win_center)
+    # 2.将整合后的数据转为array，并获取dicom文件基本信息(经过测试  已经转化为HU值了  只需做窗宽窗位调整即可)
+    image_array = sitk.GetArrayFromImage(image2)  # z, y, x
+    # print(np.max(image_array), np.min(image_array))   # --> 3071， -1024
 
-    for idx, ith_value in enumerate(slices):
-        ith_value.Pixel_data = patient_pixels[idx].tobytes()
-        ith_value.save_as(f"/home/data/tingxuan/dcmProcess/I_new_00{idx}.dcm")
+    image_array = set_ww_and_wc(image_array, ww, wc)
+    # print(np.max(image_array), np.min(image_array))  # --> 255, 0
 
-    return patient_pixels
+    origin = image2.GetOrigin()  # x, y, z
+    spacing = image2.GetSpacing()  # x, y, z
+    direction = image2.GetDirection()  # x, y, z
 
-
-# 纵隔窗窗宽窗位
-win_width = 300
-win_center = 40
-dcm_path = "/home/data/tingxuan/DICOM"
-dcm_list = list_file(dcm_path)
-print(dcm_list)
-""" dcm_list
-["/home/data/tingxuan/Research/guoyong/1/VVP0RFAZ/U23MAA4W/, ..., ..."]
-"""
-
-if __name__ == "__main__":
-    patient0_slices = load_and_hu_convert(dcm_list[0], win_width, win_center)
-    print(patient0_slices)
+    # 3.将array转为img，并保存为.nii
+    image3 = sitk.GetImageFromArray(image_array)
+    image3.SetSpacing(spacing)
+    image3.SetDirection(direction)
+    image3.SetOrigin(origin)
+    sitk.WriteImage(image3, nii_path)
 
 
 
+if __name__ == '__main__':
 
+    # 纵隔窗窗宽窗位
+    win_width, win_center = 300, 40
 
+    dcms_path = "/home/data/tingxuan/DICOM/UDC0HSKF/"
 
+    nii_path = "/home/data/tingxuan/NII/UDC0HSKF.nii"
 
+    # dcm2nii(dcms_path, nii_path, win_width, win_center)
 
+    img = nib.load(nii_path)
+    img = img.get_fdata()
+    print(img.shape)
+    print(img)
+
+    print(np.max(img), np.min(img))   # --> 3071， -1024
 
 
