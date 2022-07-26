@@ -66,13 +66,10 @@ if __name__ == '__main__':
 
     nii_path = "/home/data/tingxuan/NII/UDC0HSKF.nii"
 
-    # dcm2nii(dcms_path, nii_path, win_width, win_center)
+    dcm2nii(dcms_path, nii_path, win_width, win_center)
 
     img = nib.load(nii_path)
     img = img.get_fdata()
-    print(img.shape)
-    print(img)
 
-    print(np.max(img), np.min(img))   # --> 3071， -1024
 
 
